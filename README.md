@@ -52,11 +52,16 @@ cp supabase/.env.example supabase/.env
 
 ### 2. Setup environment files
 
+```
+cp n8n/.env.example supabase/.env
+cp proxy/cloudflared/.env.example supabase/.env
+cp supabase/.env.example supabase/.env
+```
+
 #### n8n configuration
 
 ```bash
 cd n8n
-cp .env.example .env
 nano .env  # or use your preferred editor
 ```
 
@@ -69,7 +74,6 @@ Edit `n8n/.env` and set:
 
 ```bash
 cd supabase/docker
-cp .env.example .env
 nano .env  # or use your preferred editor
 ```
 
@@ -89,7 +93,6 @@ Edit `supabase/docker/.env` and set:
 
 ```bash
 cd proxy/npm
-cp .env.example .env
 ```
 - No environment variables required for basic setup
 
@@ -97,7 +100,7 @@ cp .env.example .env
 
 ```bash
 cd proxy/cloudflared
-cp .env.example .env
+nano .env  # or use your preferred editor
 ```
 
 Set `CLOUDFLARE_TUNNEL_TOKEN` from Cloudflare Zero Trust Dashboard.
