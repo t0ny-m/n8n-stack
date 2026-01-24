@@ -22,7 +22,7 @@ case "$MODE" in
     echo "Stopping all Supabase services except Postgres..."
 
     docker compose stop \
-      studio auth rest realtime storage meta functions kong analytics vector imgproxy supavisor || true
+      studio auth rest realtime storage meta functions kong vector imgproxy supavisor || true
 
     echo "----------------------------------------"
     echo "Running containers:"

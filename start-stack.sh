@@ -589,7 +589,7 @@ main() {
     print_header "Selected Services"
     echo "The following services will be started:"
     echo ""
-    $START_N8N && echo "  • n8n (+ minimal Supabase: db, vector, analytics)"
+    $START_N8N && echo "  • n8n (+ minimal Supabase: db, vector)"
     $START_SUPABASE && echo "  • Supabase (full stack)"
     $START_NPM && echo "  • Nginx Proxy Manager"
     $START_CLOUDFLARED && echo "  • Cloudflared Tunnel"
@@ -638,8 +638,8 @@ main() {
             print_info "Stopping existing Supabase containers..."
             $DOCKER_COMPOSE down 2>/dev/null || true
             
-            print_info "Starting minimal Supabase (vector, db, analytics)..."
-            $DOCKER_COMPOSE up -d vector db analytics
+            print_info "Starting minimal Supabase (vector, db)..."
+            $DOCKER_COMPOSE up -d vector db
             
             wait_for_healthy "supabase-db" 60
             
