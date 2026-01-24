@@ -1,0 +1,119 @@
+services:
+  # Init-container for creating n8n user and schema in PostgreSQL
+  n8n-db-init:
+    image: postgres:15-alpine
+    container_name: n8n-db-init
+    restart: "no"  # Starts once and stops
+    env_file:
+      - .env
+      - ../supabase/.env  # Reading POSTGRES_PASSWORD from Supabase
+    networks:
+      - default
+    command: >
+      sh -c '
+      echo "=== Initializing n8n database ===" &&
+      
+      until pg_isready -h supabase-db -p 5432 -U postgres; do
+        echo "Waiting for PostgreSQL to be ready..."
+        sleep 2
+      done &&
+      
+      echo "PostgreSQL is ready. Creating n8n user and schema..." &&
+      
+      psql "postgresql://postgres:$${POSTGRES_PASSWORD}@supabase-db:5432/postgres" <<EOF
+      
+      -- Creating n8n user (idempotent)
+      DO \$\$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ''n8n'') THEN
+          CREATE USER n8n WITH PASSWORD ''$${DB_POSTGRESDB_PASSWORD}'';
+          RAISE NOTICE ''User n8n created successfully'';
+        ELSE
+          RAISE NOTICE ''User n8n already exists, skipping creation'';
+        END IF;
+      END
+      \$\$;
+      
+      -- n8n schema creation
+      CREATE SCHEMA IF NOT EXISTS n8n;
+      
+      -- Granting database connection rights
+      GRANT CONNECT ON DATABASE postgres TO n8n;
+      GRANT ALL PRIVILEGES ON DATABASE postgres TO n8n;
+      
+      -- Granting permissions for n8n schema
+      GRANT ALL PRIVILEGES ON SCHEMA n8n TO n8n;
+      GRANT USAGE ON SCHEMA n8n TO n8n;
+      
+      -- Rights to future tables and sequences
+      ALTER DEFAULT PRIVILEGES IN SCHEMA n8n
+        GRANT ALL ON TABLES TO n8n;
+      
+      ALTER DEFAULT PRIVILEGES IN SCHEMA n8n
+        GRANT ALL ON SEQUENCES TO n8n;
+      
+      ALTER DEFAULT PRIVILEGES IN SCHEMA n8n
+        GRANT ALL ON FUNCTIONS TO n8n;
+      
+      -- Setting search_path for user n8n
+      ALTER ROLE n8n SET search_path = n8n, public;
+      
+      -- Schema Owner Setting
+      ALTER SCHEMA n8n OWNER TO n8n;
+      
+      -- Creating the vector extension (if needed for n8n)
+      CREATE EXTENSION IF NOT EXISTS vector;
+      
+      \echo ''=== n8n database initialization completed successfully ==='
+      
+      EOF
+      
+      echo "=== Init completed ===" &&
+      exit 0
+      '
+
+  # n8n - the main container
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+      
+    deploy:
+      resources:
+#        limits:
+#          cpus: '2'
+#          memory: 1024M
+        reservations:
+          memory: 512M
+    stop_grace_period: 60s
+
+    env_file:
+      - .env
+
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./files:/files
+      - ./backup:/backup
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+      
+    networks:
+      - default
+
+    depends_on:
+      n8n-db-init:
+        condition: service_completed_successfully
+
+volumes:
+  n8n_data:
+
+networks:
+  default:
+    external: true
+    name: n8n-stack-network
