@@ -20,7 +20,9 @@ Complete self-hosted stack with n8n, Supabase, Nginx Proxy Manager, and Cloudfla
 
 #### Linux
 ```bash
-curl -fsSL https://get.docker.com | sh
+sudo apt update && sudo apt upgrade -y
+curl -fsSL https://get.docker.com | sudo sh
+docker --version
 sudo usermod -aG docker $USER
 newgrp docker
 ```
