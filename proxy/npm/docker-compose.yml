@@ -11,7 +11,7 @@ services:
 
     volumes:
       - npm_data:/data
-      - ./letsencrypt:/letsencrypt
+      - ./letsencrypt:/etc/letsencrypt
 
     healthcheck:
       test: ["CMD", "/bin/check-health"]
