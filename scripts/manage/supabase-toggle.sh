@@ -2,7 +2,7 @@
 set -e
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-SUPABASE_DIR="$PROJECT_ROOT/supabase/docker"
+SUPABASE_DIR="$PROJECT_ROOT/supabase"
 
 cd "$SUPABASE_DIR"
 
