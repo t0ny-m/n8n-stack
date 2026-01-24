@@ -155,6 +155,218 @@ check_docker() {
     echo ""
 }
 
+# ============================================================================
+# Port Checking & Firewall Management
+# ============================================================================
+
+# Check if a port is in use
+is_port_in_use() {
+    local port=$1
+    if command -v lsof &>/dev/null; then
+        lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1
+    elif command -v ss &>/dev/null; then
+        ss -tuln | grep -q ":$port "
+    elif command -v netstat &>/dev/null; then
+        netstat -tuln | grep -q ":$port "
+    else
+        return 1  # Can't check, assume not in use
+    fi
+}
+
+# Check if a port is open in firewall
+is_port_open_in_firewall() {
+    local port=$1
+    
+    # Only check on Linux
+    [[ "$(uname -s)" != "Linux" ]] && return 0
+    
+    if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "Status: active"; then
+        sudo ufw status | grep -qE "^$port(/tcp)?.*ALLOW"
+    elif command -v firewall-cmd &>/dev/null; then
+        sudo firewall-cmd --query-port=$port/tcp 2>/dev/null
+    else
+        return 0  # No firewall detected, assume open
+    fi
+}
+
+# Open port in firewall
+open_port_in_firewall() {
+    local port=$1
+    
+    if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "Status: active"; then
+        sudo ufw allow $port/tcp
+    elif command -v firewall-cmd &>/dev/null; then
+        sudo firewall-cmd --permanent --add-port=$port/tcp
+        sudo firewall-cmd --reload
+    fi
+}
+
+# Show instructions for opening ports
+show_port_instructions() {
+    local ports=("$@")
+    local ports_str="${ports[*]}"
+    
+    echo ""
+    print_info "Please open the following ports manually:"
+    echo "  Ports: ${ports_str// /, }"
+    echo ""
+    echo "  UFW (Ubuntu/Debian):"
+    for port in "${ports[@]}"; do
+        echo "    sudo ufw allow $port/tcp"
+    done
+    echo ""
+    echo "  Firewalld (CentOS/RHEL):"
+    for port in "${ports[@]}"; do
+        echo "    sudo firewall-cmd --permanent --add-port=$port/tcp"
+    done
+    echo "    sudo firewall-cmd --reload"
+    echo ""
+    echo -e "  ${YELLOW}⚠ Don't forget to open ports in your cloud provider's firewall/security group!${NC}"
+    echo ""
+}
+
+# Main port check function
+check_and_open_ports() {
+    local ports=("$@")
+    local in_use_ports=()
+    local closed_ports=()
+    
+    print_header "Port Check"
+    
+    # Check for occupied ports
+    for port in "${ports[@]}"; do
+        if is_port_in_use "$port"; then
+            in_use_ports+=($port)
+            print_error "Port $port is already in use"
+            if command -v lsof &>/dev/null; then
+                lsof -i :$port | grep LISTEN | head -3
+            fi
+        else
+            print_success "Port $port is available"
+        fi
+    done
+    
+    # If ports are in use, warn user
+    if [ ${#in_use_ports[@]} -gt 0 ]; then
+        echo ""
+        print_error "Some ports are already in use: ${in_use_ports[*]}"
+        echo "Services using these ports may fail to start."
+        read -rp "Continue anyway? [y/N]: " response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            print_error "Operation cancelled by user"
+            exit 0
+        fi
+    fi
+    
+    # Only check firewall on Linux
+    if [[ "$(uname -s)" != "Linux" ]]; then
+        print_info "Skipping firewall check (not on Linux)"
+        return 0
+    fi
+    
+    # Check firewall
+    print_header "Firewall Check"
+    
+    # Detect firewall type
+    local firewall_type=""
+    if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "Status: active"; then
+        firewall_type="ufw"
+        print_info "Detected active firewall: UFW"
+    elif command -v firewall-cmd &>/dev/null && sudo firewall-cmd --state 2>/dev/null | grep -q "running"; then
+        firewall_type="firewalld"
+        print_info "Detected active firewall: firewalld"
+    else
+        print_info "No active firewall detected (ufw/firewalld)"
+        echo ""
+        echo -e "${YELLOW}⚠ Note: If you're on a VPS, check your cloud provider's firewall/security group!${NC}"
+        echo "  Required ports: ${ports[*]}"
+        echo ""
+        return 0
+    fi
+    
+    # Check which ports need to be opened
+    for port in "${ports[@]}"; do
+        if ! is_port_open_in_firewall "$port"; then
+            closed_ports+=($port)
+            print_error "Port $port is closed in firewall"
+        else
+            print_success "Port $port is open in firewall"
+        fi
+    done
+    
+    # If no ports need to be opened, we're done
+    if [ ${#closed_ports[@]} -eq 0 ]; then
+        print_success "All required ports are open"
+        return 0
+    fi
+    
+    # Ask user if they want to open ports
+    echo ""
+    print_info "The following ports need to be opened: ${closed_ports[*]}"
+    read -rp "Open these ports automatically? (requires sudo) [Y/n]: " response
+    
+    if [[ ! "$response" =~ ^[Nn]$ ]]; then
+        # Try to open ports
+        local failed_ports=()
+        for port in "${closed_ports[@]}"; do
+            echo -n "Opening port $port... "
+            if open_port_in_firewall "$port" 2>/dev/null; then
+                echo -e "${GREEN}OK${NC}"
+            else
+                echo -e "${RED}FAILED${NC}"
+                failed_ports+=($port)
+            fi
+        done
+        
+        if [ ${#failed_ports[@]} -gt 0 ]; then
+            show_port_instructions "${failed_ports[@]}"
+        else
+            print_success "All ports opened successfully"
+            echo ""
+            echo -e "${YELLOW}⚠ Remember: Also open these ports in your cloud provider's firewall!${NC}"
+        fi
+    else
+        show_port_instructions "${closed_ports[@]}"
+    fi
+    
+    echo ""
+}
+
+# Determine which ports to check based on selected services
+get_required_ports() {
+    local ports=()
+    
+    # Load port values from supabase .env if it exists
+    local KONG_HTTP_PORT=8000
+    local KONG_HTTPS_PORT=8443
+    local POSTGRES_PORT=5432
+    local POOLER_PROXY_PORT_TRANSACTION=6543
+    
+    if [ -f "$SUPABASE_DIR/.env" ]; then
+        source "$SUPABASE_DIR/.env" 2>/dev/null || true
+    fi
+    
+    if $START_NPM && ! $START_CLOUDFLARED; then
+        # NPM selected - only need 80, 81, 443
+        ports=(80 81 443)
+    elif $START_CLOUDFLARED; then
+        # Cloudflared selected - no ports needed
+        ports=()
+    elif $START_SUPABASE && ! $START_NPM; then
+        # Full Supabase without NPM - need all Supabase ports
+        ports=($POSTGRES_PORT $POOLER_PROXY_PORT_TRANSACTION 4000 $KONG_HTTP_PORT $KONG_HTTPS_PORT)
+        if $START_N8N; then
+            ports+=(5678)
+        fi
+    elif $START_N8N && ! $START_SUPABASE && ! $START_NPM; then
+        # n8n only (minimal Supabase) - need n8n + db ports
+        ports=(5678 $POSTGRES_PORT $POOLER_PROXY_PORT_TRANSACTION 4000)
+    fi
+    
+    # Remove duplicates
+    printf '%s\n' "${ports[@]}" | sort -u | tr '\n' ' '
+}
+
 # Create network if it doesn't exist
 create_network() {
     print_header "Network Setup"
@@ -396,7 +608,17 @@ main() {
         exit 0
     fi
     
-    # Step 4: Start services in correct order
+    # Step 4: Check ports and firewall
+    REQUIRED_PORTS=$(get_required_ports)
+    if [ -n "$REQUIRED_PORTS" ]; then
+        # Convert space-separated string to array
+        read -ra PORT_ARRAY <<< "$REQUIRED_PORTS"
+        check_and_open_ports "${PORT_ARRAY[@]}"
+    else
+        print_info "Using Cloudflared Tunnel - no port check needed"
+    fi
+    
+    # Step 5: Start services in correct order
     
     # 4.1: Supabase (if needed)
     SUPABASE_STARTED=false
