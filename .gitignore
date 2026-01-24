@@ -35,6 +35,8 @@ Thumbs.db
 # Proxy / LetsEncrypt
 **/proxy/npm/letsencrypt/*
 !**/proxy/npm/letsencrypt/.gitkeep
+**/proxy/npm/data/*
+!**/proxy/npm/data/.gitkeep
 
 # n8n local files
 n8n/files/*

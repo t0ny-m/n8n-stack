@@ -5,25 +5,22 @@ services:
     restart: unless-stopped
 
     ports:
-      - "80:80"     # HTTP
-      - "81:81"     # Admin UI
-      - "443:443"   # HTTPS
+      - "80:80" # HTTP
+      - "81:81" # Admin UI
+      - "443:443" # HTTPS
 
     volumes:
-      - npm_data:/data
+      - ./data:/data
       - ./letsencrypt:/etc/letsencrypt
 
     healthcheck:
-      test: ["CMD", "/bin/check-health"]
+      test: [ "CMD", "/bin/check-health" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
     networks:
       - default
-
-volumes:
-  npm_data:
 
 networks:
   default:
