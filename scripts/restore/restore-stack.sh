@@ -335,9 +335,11 @@ restore_n8n() {
     # Configs
     print_info "Restoring files..."
     cp -r "$src_path/.env" "$N8N_DIR/.env"
-    mkdir -p "$N8N_DIR/files"
+    mkdir -p "$N8N_DIR"
     if [ -d "$src_path/files" ]; then
-        cp -r "$src_path/files/"* "$N8N_DIR/files/"
+        print_info "Restoring files directory..."
+        rm -rf "$N8N_DIR/files"
+        cp -R "$src_path/files" "$N8N_DIR/"
     fi
     
     # Volume
