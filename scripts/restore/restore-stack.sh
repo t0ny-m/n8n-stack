@@ -326,6 +326,80 @@ clean_volume() {
     fi
 }
 
+# Helper: Restore logical dump
+restore_n8n_db_dump() {
+    local dump_file="$1"
+    
+    print_info "Logical dump found: $(basename "$dump_file")"
+    if $RESTORE_SUPABASE; then
+        print_info "Skipping logical restore because Supabase volume restore is selected (preferring full volume restore)."
+        return 0
+    fi
+    
+    print_info "Supabase volume restore NOT selected. Attempting logical DB restore..."
+    
+    # We need the database running to restore SQL
+    # Check if supabase-db is running
+    local db_container="supabase-db"
+    local needs_stop=false
+    
+    if ! docker ps | grep -q "$db_container"; then
+        print_info "Starting Supabase DB temporarily..."
+        if [ -d "$SUPABASE_DIR" ]; then
+            cd "$SUPABASE_DIR"
+            # Start only db
+            docker compose up -d db
+            
+            # Wait for health
+            echo -n "Waiting for DB to accept connections..."
+            local retries=30
+            while [ $retries -gt 0 ]; do
+                if docker exec "$db_container" pg_isready -U postgres >/dev/null 2>&1; then
+                    echo " OK"
+                    break
+                fi
+                echo -n "."
+                sleep 2
+                retries=$((retries - 1))
+            done
+            
+            if [ $retries -eq 0 ]; then
+                print_error "Database took too long to start. Skipping logical restore."
+                return 1
+            fi
+            
+            needs_stop=true
+        else
+             print_error "Supabase directory not found. Cannot start DB."
+             return 1
+        fi
+    fi
+    
+    # Perform Restore
+    print_info "Restoring schema 'n8n' from dump..."
+    
+    # Drop existing schema to be clean (WARNING: destructive)
+    # We use a one-liner to drop and recreate
+    # Pipe the dump file into docker exec
+    # Note: we need to handle the file streaming carefully
+    
+    if docker exec -i "$db_container" psql -U postgres -d postgres -c "DROP SCHEMA IF EXISTS n8n CASCADE; CREATE SCHEMA n8n;" >/dev/null; then
+         # Restore data
+         if docker exec -i "$db_container" psql -U postgres -d postgres < "$dump_file" >/dev/null; then
+             print_success "Logical backup restored successfully."
+         else
+             print_error "Failed to import SQL dump."
+         fi
+    else
+         print_error "Failed to recreate schema."
+    fi
+    
+    if [ "$needs_stop" = "true" ]; then
+        print_info "Stopping temporary Supabase DB..."
+        cd "$SUPABASE_DIR" && docker compose stop db
+    fi
+}
+
 restore_n8n() {
     local src_path="$1" # Folder containing files/ and .env and .tar.gz
     print_header "Restoring n8n"
@@ -357,6 +431,12 @@ restore_n8n() {
         print_success "n8n restored"
     else
         print_warning "Volume backup not found at $vol_file"
+    fi
+    
+    # Logical DB Restore
+    local dump_file="$src_path/n8n_schema_dump.sql"
+    if [ -f "$dump_file" ]; then
+        restore_n8n_db_dump "$dump_file"
     fi
 }
 
