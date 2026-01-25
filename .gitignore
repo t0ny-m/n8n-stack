@@ -34,9 +34,7 @@ Thumbs.db
 
 # Proxy / LetsEncrypt
 **/proxy/npm/letsencrypt/*
-!**/proxy/npm/letsencrypt/.gitkeep
 **/proxy/npm/data/*
-!**/proxy/npm/data/.gitkeep
 
 # n8n local files
 n8n/files/*
@@ -45,8 +43,9 @@ n8n/backup/*
 !n8n/backup/.gitkeep
 
 # Backups
-backups/../*
+#backups/**
 !backups/**/.gitkeep
+**/backups/*
 
 # --- CONFIGURATIONS (DO NOT IGNORE) ---
 !**/volumes/db/*.sql
