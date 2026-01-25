@@ -347,7 +347,8 @@ restore_n8n() {
     if [ -f "$vol_file" ]; then
         clean_volume "n8n_n8n_data"
         print_info "Restoring n8n_data volume..."
-        docker volume create n8n_n8n_data
+        # Create volume with labels so Docker Compose recognizes it
+        docker volume create --label com.docker.compose.project=n8n --label com.docker.compose.volume=n8n_data n8n_n8n_data
         docker run --rm \
             -v n8n_n8n_data:/volume \
             -v "$(dirname "$vol_file")":/backup \
@@ -415,7 +416,8 @@ restore_portainer() {
     if [ -f "$vol_file" ]; then
         clean_volume "portainer_data"
         print_info "Restoring portainer_data volume..."
-        docker volume create portainer_data
+        # Create volume with labels so Docker Compose recognizes it
+        docker volume create --label com.docker.compose.project=portainer --label com.docker.compose.volume=portainer_data portainer_data
         docker run --rm \
             -v portainer_data:/volume \
             -v "$(dirname "$vol_file")":/backup \
