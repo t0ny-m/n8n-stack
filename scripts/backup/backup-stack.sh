@@ -245,7 +245,7 @@ backup_supabase() {
             # We copy the whole volumes directory which contains db, storage, etc.
             # Using rsync if available for better handling, else cp
             if command -v rsync &>/dev/null; then
-                rsync -av --exclude 'postgres_data' "$SUPABASE_DIR/volumes" "$full_path/"
+                rsync -a --exclude 'postgres_data' "$SUPABASE_DIR/volumes" "$full_path/"
             else
                 cp -R "$SUPABASE_DIR/volumes" "$full_path/"
             fi
@@ -470,11 +470,16 @@ main() {
         # 5. Portainer
         if $BACKUP_PORTAINER; then
              if [ -d "$PORTAINER_DIR" ]; then
-                 print_info "Stopping Portainer..."
-                 cd "$PORTAINER_DIR" && docker compose down 2>/dev/null || true
-                 PORTAINER_RUNNING="true" # Assume running if we are stopping it, simple logic
+                 print_info "Checking Portainer state..."
+                 cd "$PORTAINER_DIR"
+                 if docker compose ps --services --filter "status=running" | grep -q "portainer"; then
+                     PORTAINER_RUNNING="true"
+                     print_info "Stopping Portainer..."
+                     docker compose down 2>/dev/null || true
+                 fi
              fi
         fi
+
         
         echo ""
     fi
