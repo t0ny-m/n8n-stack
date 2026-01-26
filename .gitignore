@@ -46,7 +46,7 @@ n8n/backup/*
 #backups/**
 !backups/**/.gitkeep
 **/backups/*
-
+!backups/.gitkeep
 # --- CONFIGURATIONS (DO NOT IGNORE) ---
 !**/volumes/db/*.sql
 !**/volumes/api/kong.yml
