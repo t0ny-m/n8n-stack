@@ -13,7 +13,8 @@ services:
       sh -c '
       echo "=== Initializing n8n database ==="
 
-      until pg_isready -h supabase-db -p 5432 -U postgres; do
+      # Wait for database availability
+      until pg_isready -h "$${DB_POSTGRESDB_HOST}" -p "$${DB_POSTGRESDB_PORT}" -U postgres; do
         echo "Waiting for PostgreSQL to be ready..."
         sleep 2
       done
@@ -21,50 +22,41 @@ services:
       echo "PostgreSQL is ready. Creating n8n user and schema..."
 
       # First session: postgres user for basic setup
-      # using $$$$ to escape $$ in docker-compose for the DO block
-      PGPASSWORD="$${POSTGRES_PASSWORD}" psql -h supabase-db -U postgres -d postgres <<\EOF
+      # Create or update user password
+      PGPASSWORD="$${POSTGRES_PASSWORD}" psql -h "$${DB_POSTGRESDB_HOST}" -p "$${DB_POSTGRESDB_PORT}" -U postgres -d postgres \
+        -c "ALTER USER \"$${DB_POSTGRESDB_USER}\" WITH PASSWORD '\''$${DB_POSTGRESDB_PASSWORD}'\''" || \
+      PGPASSWORD="$${POSTGRES_PASSWORD}" psql -h "$${DB_POSTGRESDB_HOST}" -p "$${DB_POSTGRESDB_PORT}" -U postgres -d postgres \
+        -c "CREATE USER \"$${DB_POSTGRESDB_USER}\" WITH PASSWORD '\''$${DB_POSTGRESDB_PASSWORD}'\''"
 
-      -- Creating n8n user (idempotent)
-      DO $$$$
-      BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '\''n8n'\'') THEN
-          CREATE USER n8n WITH PASSWORD '\''$${DB_POSTGRESDB_PASSWORD}'\'';
-          RAISE NOTICE '\''User n8n created successfully'\'';
-        ELSE
-          RAISE NOTICE '\''User n8n already exists, skipping creation'\'';
-        END IF;
-      END
-      $$$$;
-
-      -- n8n schema creation
-      CREATE SCHEMA IF NOT EXISTS n8n;
+      PGPASSWORD="$${POSTGRES_PASSWORD}" psql -h "$${DB_POSTGRESDB_HOST}" -p "$${DB_POSTGRESDB_PORT}" -U postgres -d postgres <<EOF
+      -- Schema creation
+      CREATE SCHEMA IF NOT EXISTS "$${DB_POSTGRESDB_SCHEMA}";
 
       -- Granting database connection rights
-      GRANT CONNECT ON DATABASE postgres TO n8n;
-      GRANT ALL PRIVILEGES ON DATABASE postgres TO n8n;
+      GRANT CONNECT ON DATABASE "$${DB_POSTGRESDB_DATABASE}" TO "$${DB_POSTGRESDB_USER}";
+      GRANT ALL PRIVILEGES ON DATABASE "$${DB_POSTGRESDB_DATABASE}" TO "$${DB_POSTGRESDB_USER}";
 
-      -- Granting permissions for n8n schema
-      GRANT ALL PRIVILEGES ON SCHEMA n8n TO n8n;
+      -- Granting permissions for schema
+      GRANT ALL PRIVILEGES ON SCHEMA "$${DB_POSTGRESDB_SCHEMA}" TO "$${DB_POSTGRESDB_USER}";
 
       -- Rights to future tables and sequences
-      ALTER DEFAULT PRIVILEGES IN SCHEMA n8n
-        GRANT ALL ON TABLES TO n8n;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA "$${DB_POSTGRESDB_SCHEMA}"
+        GRANT ALL ON TABLES TO "$${DB_POSTGRESDB_USER}";
 
-      ALTER DEFAULT PRIVILEGES IN SCHEMA n8n
-        GRANT ALL ON SEQUENCES TO n8n;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA "$${DB_POSTGRESDB_SCHEMA}"
+        GRANT ALL ON SEQUENCES TO "$${DB_POSTGRESDB_USER}";
 
-      -- Setting search_path for user n8n
-      ALTER ROLE n8n SET search_path = n8n, public;
-
+      -- Setting search_path for user
+      ALTER ROLE "$${DB_POSTGRESDB_USER}" SET search_path = "$${DB_POSTGRESDB_SCHEMA}", public;
       EOF
 
       echo "Running ownership and extension setup as supabase_admin..."
 
       # Second session: supabase_admin for ownership and extensions
-      PGPASSWORD="$${POSTGRES_PASSWORD}" psql -h supabase-db -U supabase_admin -d postgres <<\EOF
+      PGPASSWORD="$${POSTGRES_PASSWORD}" psql -h "$${DB_POSTGRESDB_HOST}" -p "$${DB_POSTGRESDB_PORT}" -U supabase_admin -d postgres <<EOF
 
       -- Schema Owner Setting (requires supabase_admin)
-      ALTER SCHEMA n8n OWNER TO n8n;
+      ALTER SCHEMA "$${DB_POSTGRESDB_SCHEMA}" OWNER TO "$${DB_POSTGRESDB_USER}";
 
       -- Creating the vector extension (if needed for n8n)
       CREATE EXTENSION IF NOT EXISTS vector;
