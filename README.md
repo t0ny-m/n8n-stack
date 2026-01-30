@@ -69,16 +69,13 @@ Make sure WSL2 backend is enabled.
 ```bash
 git clone https://github.com/t0ny-m/n8n-stack.git
 cd n8n-stack
-cp n8n/.env.example n8n/.env
-cp proxy/cloudflared/.env.example proxy/cloudflared/.env
-cp supabase/.env.example supabase/.env
 ```
 
 ### 2. Setup environment files
 
 ```
-cp n8n/.env.example supabase/.env
-cp proxy/cloudflared/.env.example supabase/.env
+cp n8n/.env.example n8n/.env
+cp proxy/cloudflared/.env.example proxy/cloudflared/.env
 cp supabase/.env.example supabase/.env
 ```
 
