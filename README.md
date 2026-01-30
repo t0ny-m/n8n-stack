@@ -20,12 +20,34 @@ Complete self-hosted stack with n8n, Supabase, Nginx Proxy Manager, and Cloudfla
 
 #### Linux
 ```bash
+sudo systemctl enable ssh
+```
+SSH will start automatically every time the system boots
+
+```bash
 sudo apt update && sudo apt upgrade -y
 curl -fsSL https://get.docker.com | sudo sh
 docker --version
 sudo usermod -aG docker $USER
 newgrp docker
 ```
+
+**Note**
+
+The Docker service starts automatically after installation. To verify that Docker is running, use:
+```bash
+sudo systemctl status docker
+```
+Some systems may have this behavior disabled and will require a manual start:
+```bash
+sudo systemctl start docker
+```
+
+Verify that the installation is successful by running the hello-world image:
+```bash
+sudo docker run hello-world
+```
+This command downloads a test image and runs it in a container. When the container runs, it prints a confirmation message and exits.
 
 #### macOS
 Download from: https://docs.docker.com/desktop/install/mac-install/
